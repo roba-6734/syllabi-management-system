@@ -1,0 +1,40 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Brownie project directories
+build/
+reports/
+interfaces/
+
+# Local Brownie account keystore files
+# Make sure to keep your private keys and keystore files safe!
+brownie_accounts/
+
+# Node modules for JavaScript dependencies
+node_modules/
+
+# Environment variables file
+.env
+
+# Brownie config backups
+*.yaml.bak
+
+# Solidity build artifacts
+artifacts/
+cache/
+
+# VS Code settings
+.vscode/
+
+# MacOS files
+.DS_Store
+
+# Linux files
+*.swp
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

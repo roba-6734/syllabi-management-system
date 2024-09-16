@@ -1,0 +1,21 @@
+dotenv: .env # Load environment variables from .env file
+
+networks:
+  development:
+    host: http://127.0.0.1
+    port: 7545
+    gas_price: auto
+
+  sepolia:
+    host: https://sepolia.infura.io/v3/$WEB3_INFURA_PROJECT_ID
+    chainid: 11155111
+    explorer: https://sepolia.etherscan.io
+
+dependencies:
+  - OpenZeppelin/openzeppelin-contracts@4.8.0
+
+compiler:
+  solc:
+    remappings:
+      - "@openzeppelin=OpenZeppelin/openzeppelin-contracts@4.8.0"
+    version: 0.8.19
