@@ -8,15 +8,24 @@ contract SyllabusManager is AccessControl {
     bytes32 public constant MINISTRY_ROLE = keccak256("MINISTRY_ROLE");  // Ministry of Education role
     bytes32 public constant UNIVERSITY_ROLE = keccak256("UNIVERSITY_ROLE");  // University role
 
-    uint public approvalThreshold = 3;  // Number of votes needed to approve a syllabus
+    // Number of votes needed to approve a syllabus
+    uint public approvalThreshold = 2;  // Set default approval threshold (can be updated)
 
+    // Store registered nodes
+    address[] public registeredNodes;
+
+    // Tracks when a syllabus was last approved for each institution
+    mapping(address => uint) public lastApprovedTime;
+
+    // Structure for Syllabus
     struct Syllabus {
         uint id;
-        string cid; // IPFS CID
+        string cid;  // IPFS CID
         address institution;
         uint voteCount;
         bool approved;
-        mapping(address => bool) votes;
+        bool ministryVotedInFavor;  // Track if the ministry voted in favor
+        mapping(address => bool) votes;  // Track who voted
     }
 
     uint public syllabusCount = 0;
@@ -28,20 +37,28 @@ contract SyllabusManager is AccessControl {
     event SyllabusApproved(uint syllabusId);
     event NodeRegistered(address newNode);
 
+    // Constructor
     constructor() {
-        // Grant the deployer the Ministry of Education role (MINISTRY_ROLE)
-        _setupRole(MINISTRY_ROLE, msg.sender);
-        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);  // Admin role is also held by the Ministry
+        _setupRole(MINISTRY_ROLE, msg.sender);  // Grant deployer the MINISTRY_ROLE
+        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);  // Grant deployer admin role
     }
 
-    // Ministry of Education registers new nodes (universities)
+    // Register new node (university) by Ministry role
     function registerNode(address _newNode) public onlyRole(MINISTRY_ROLE) {
         grantRole(UNIVERSITY_ROLE, _newNode);
+        registeredNodes.push(_newNode);
         emit NodeRegistered(_newNode);
     }
 
-    // University submits a new syllabus
+    // View the list of registered nodes
+    function getRegisteredNodes() public view returns (address[] memory) {
+        return registeredNodes;
+    }
+
+    // Submit a syllabus (6-month gap enforced)
     function submitSyllabus(string memory _cid) public onlyRole(UNIVERSITY_ROLE) {
+        require(block.timestamp > lastApprovedTime[msg.sender] + 180 days, "Cannot propose a new syllabus yet");
+
         syllabusCount++;
         Syllabus storage newSyllabus = syllabi[syllabusCount];
         newSyllabus.id = syllabusCount;
@@ -49,40 +66,43 @@ contract SyllabusManager is AccessControl {
         newSyllabus.institution = msg.sender;
         newSyllabus.voteCount = 0;
         newSyllabus.approved = false;
+        newSyllabus.ministryVotedInFavor = false;
+
         emit SyllabusSubmitted(syllabusCount, _cid, msg.sender);
     }
 
-    // Any node can vote on a syllabus, but each node can only vote once per syllabus
+    // Vote on a syllabus
     function voteOnSyllabus(uint _syllabusId) public {
-    // Check if the sender has either the MINISTRY_ROLE or UNIVERSITY_ROLE
-    require(
-        hasRole(MINISTRY_ROLE, msg.sender) || hasRole(UNIVERSITY_ROLE, msg.sender),
-        "You do not have permission to vote"
-    );
+        require(registeredNodes.length > 0, "No registered nodes to vote");
+        
+        Syllabus storage syllabus = syllabi[_syllabusId];
+        require(!syllabus.votes[msg.sender], "Already voted on this syllabus");
+        require(!syllabus.approved, "Syllabus already approved");
 
-    Syllabus storage syllabus = syllabi[_syllabusId];
-    require(!syllabus.votes[msg.sender], "Already voted on this syllabus");
-    require(!syllabus.approved, "Syllabus already approved");
+        if (hasRole(MINISTRY_ROLE, msg.sender)) {
+            // Ministry votes in favor
+            syllabus.ministryVotedInFavor = true;
+        }
 
-    // Register the vote
-    syllabus.votes[msg.sender] = true;
-    syllabus.voteCount++;
+        syllabus.votes[msg.sender] = true;
+        syllabus.voteCount++;
 
-    emit SyllabusVoted(_syllabusId, msg.sender);
+        emit SyllabusVoted(_syllabusId, msg.sender);
 
-    // Check if the vote count exceeds the threshold
-    if (syllabus.voteCount >= approvalThreshold) {
-        syllabus.approved = true;
-        emit SyllabusApproved(_syllabusId);
+        // Check if Ministry voted in favor and if the number of votes exceeds the threshold
+        if (syllabus.ministryVotedInFavor && syllabus.voteCount > registeredNodes.length / 2) {
+            syllabus.approved = true;
+            lastApprovedTime[syllabus.institution] = block.timestamp;  // Update the approval time
+            emit SyllabusApproved(_syllabusId);
+        }
     }
-}
 
-    // Ministry of Education (Admin) can update the vote threshold
+    // Update the approval threshold (by Ministry role)
     function updateApprovalThreshold(uint _newThreshold) public onlyRole(MINISTRY_ROLE) {
         approvalThreshold = _newThreshold;
     }
 
-    // View the status of a syllabus
+    // View the details of a syllabus
     function getSyllabus(uint _syllabusId) public view returns (string memory, address, uint, bool) {
         Syllabus storage syllabus = syllabi[_syllabusId];
         return (syllabus.cid, syllabus.institution, syllabus.voteCount, syllabus.approved);
